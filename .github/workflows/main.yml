@@ -41,24 +41,27 @@ jobs:
 
           echo "RDP_PASSWORD=$RdpPassword" >> $env:GITHUB_ENV
 
-      - name: Copy & Extract ZIP to Desktop
+      - name: Copy & Extract ZIP to Downloads
         run: |
           $source = "$env:GITHUB_WORKSPACE\assets\ApnaEx.zip"
-          $desktop = "C:\Users\RDP\Desktop"
-          $zipPath = "$desktop\ApnaEx.zip"
-          $extractPath = "$desktop\ApnaEx"
+          $downloads = "C:\Users\RDP\Downloads"
 
+          # Destination paths
+          $zipPath = "$downloads\ApnaEx.zip"
+          $extractPath = "$downloads\ApnaEx"
+
+          # Copy ZIP
           Copy-Item -Path $source -Destination $zipPath -Force
 
+          # Extract ZIP
           Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
 
-          Write-Host "ZIP copied and extracted."
+          Write-Host "ZIP copied and extracted in Downloads folder."
 
-      - name: Run setup.bat with secure token
+      - name: Run setup.bat with BOT_TOKEN
         run: |
-          $desktop = "C:\Users\RDP\Desktop"
-          $extractPath = "$desktop\ApnaEx"
-
+          $downloads = "C:\Users\RDP\Downloads"
+          $extractPath = "$downloads\ApnaEx"
           $batFile = "$extractPath\setup.bat"
 
           if (-Not (Test-Path $batFile)) {
@@ -66,9 +69,9 @@ jobs:
             exit 1
           }
 
-          # Run setup.bat with TOKEN securely from GitHub Secrets
+          # Run setup.bat with Telegram BOT TOKEN securely
           Start-Process -FilePath $batFile -ArgumentList "${{ secrets.BOT_TOKEN }}" -Wait
-
+          
           Write-Host "setup.bat executed successfully."
 
       - name: Install Tailscale
