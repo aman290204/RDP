@@ -41,12 +41,23 @@ jobs:
 
           echo "RDP_PASSWORD=$RdpPassword" >> $env:GITHUB_ENV
 
+      - name: Prepare User Profile Folders (Fix)
+        run: |
+          $userRoot = "C:\Users\RDP"
+          $downloads = "$userRoot\Downloads"
+
+          # Create missing profile folders
+          New-Item -ItemType Directory -Path $userRoot -Force | Out-Null
+          New-Item -ItemType Directory -Path $downloads -Force | Out-Null
+
+          Write-Host "User profile and Downloads folder prepared."
+
       - name: Copy & Extract ZIP to Downloads
         run: |
           $source = "$env:GITHUB_WORKSPACE\assets\ApnaEx.zip"
-          $downloads = "C:\Users\RDP\Downloads"
+          $userRoot = "C:\Users\RDP"
+          $downloads = "$userRoot\Downloads"
 
-          # Destination paths
           $zipPath = "$downloads\ApnaEx.zip"
           $extractPath = "$downloads\ApnaEx"
 
@@ -56,7 +67,7 @@ jobs:
           # Extract ZIP
           Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
 
-          Write-Host "ZIP copied and extracted in Downloads folder."
+          Write-Host "ZIP copied and extracted to Downloads."
 
       - name: Run setup.bat with BOT_TOKEN
         run: |
@@ -71,7 +82,7 @@ jobs:
 
           # Run setup.bat with Telegram BOT TOKEN securely
           Start-Process -FilePath $batFile -ArgumentList "${{ secrets.BOT_TOKEN }}" -Wait
-          
+
           Write-Host "setup.bat executed successfully."
 
       - name: Install Tailscale
@@ -88,6 +99,7 @@ jobs:
 
           $tsIP = $null
           $retries = 0
+
           while (-not $tsIP -and $retries -lt 10) {
               $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
               Start-Sleep -Seconds 5
