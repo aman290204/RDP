@@ -15,130 +15,113 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure Core RDP Settings
+      - name: Configure RDP
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-                             -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                             -Name "UserAuthentication" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                             -Name "SecurityLayer" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service TermService -Force
 
-          netsh advfirewall firewall delete rule name="RDP-Tailscale" -ErrorAction SilentlyContinue
-          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
-
-          Restart-Service -Name TermService -Force
-
-      - name: Create RDP User with Hardcoded Password
+      - name: Create RDP User
         run: |
-          $RdpPassword = "Aman@123"
-          $securePass = ConvertTo-SecureString $RdpPassword -AsPlainText -Force
+          $Password = "Aman@123"
+          $Secure = ConvertTo-SecureString $Password -AsPlainText -Force
 
           if (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue) {
-              Remove-LocalUser -Name "RDP" -ErrorAction SilentlyContinue
+            Remove-LocalUser -Name "RDP"
           }
 
-          New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
+          New-LocalUser RDP -Password $Secure -AccountNeverExpires
+          Add-LocalGroupMember Administrators RDP
+          Add-LocalGroupMember "Remote Desktop Users" RDP
 
-          echo "RDP_PASSWORD=$RdpPassword" >> $env:GITHUB_ENV
+          echo "RDP_PASSWORD=$Password" >> $env:GITHUB_ENV
 
-      - name: Prepare User Folders
+      - name: Prepare Downloads Folder
         run: |
-          $userRoot = "C:\Users\RDP"
-          $downloads = "$userRoot\Downloads"
+          New-Item -ItemType Directory "C:\Users\RDP\Downloads" -Force | Out-Null
 
-          New-Item -ItemType Directory -Path $userRoot -Force | Out-Null
-          New-Item -ItemType Directory -Path $downloads -Force | Out-Null
-
-      - name: Copy & Extract ZIP to Downloads
+      - name: Extract Apna.zip
         run: |
-          $source = "$env:GITHUB_WORKSPACE\assets\Apna.zip"
-          $downloads = "C:\Users\RDP\Downloads"
+          $src = "$env:GITHUB_WORKSPACE\assets\Apna.zip"
+          $dest = "C:\Users\RDP\Downloads\Apna"
 
-          $zipPath = "$downloads\Apna.zip"
-          $extractPath = "$downloads\Apna"
+          Expand-Archive -LiteralPath $src -DestinationPath $dest -Force
+          Write-Host "Extracted to $dest"
 
-          Copy-Item -Path $source -Destination $zipPath -Force
+      - name: Install Python 3.12
+        run: |
+          Write-Host "Downloading Python 3.12..."
+          Invoke-WebRequest `
+            -Uri "https://www.python.org/ftp/python/3.12.1/python-3.12.1-amd64.exe" `
+            -OutFile "$env:TEMP\python_installer.exe"
 
-          Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
+          Write-Host "Installing Python..."
+          Start-Process "$env:TEMP\python_installer.exe" `
+            -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_launcher=1" `
+            -Wait
 
-          Write-Host "ZIP extracted to $extractPath"
+          if (-Not (Test-Path "C:\Program Files\Python312\python.exe")) {
+            Write-Error "Python 3.12 FAILED to install!"
+            exit 1
+          }
+
+          Write-Host "Python 3.12 installed successfully."
+
+      - name: Install Python Dependencies
+        run: |
+          $pip = "C:\Program Files\Python312\Scripts\pip.exe"
+
+          & $pip install --upgrade pip
+          & $pip install flask gunicorn pyromod==1.5 aiohttp aiofiles requests hachoir cloudscraper pycryptodome pytz motor "pymongo>=4.0" pyrofork PyJWT aiogram beautifulsoup4 httpx "python-telegram-bot==20.6" tqdm colorama termcolor python-dotenv
+
+          Write-Host "All pip dependencies installed."
 
       - name: Run setup.bat
         run: |
-          $downloads = "C:\Users\RDP\Downloads"
-          $extractPath = "$downloads\Apna"
-          $batFile = "$extractPath\setup.bat"
-
-          if (-Not (Test-Path $batFile)) {
-            Write-Error "setup.bat not found at: $batFile"
+          $bat = "C:\Users\RDP\Downloads\Apna\setup.bat"
+          if (-Not (Test-Path $bat)) {
+            Write-Error "setup.bat NOT FOUND!"
             exit 1
           }
 
           Write-Host "Running setup.bat..."
+          $proc = Start-Process -FilePath $bat -PassThru
+          $proc.WaitForExit()
+          Stop-Process -Id $proc.Id -ErrorAction SilentlyContinue
 
-          # Run setup.bat normally
-          $process = Start-Process -FilePath $batFile -PassThru
-          $process.WaitForExit()
+          Write-Host "setup.bat completed."
 
-          # Force close if PAUSE exists
-          Stop-Process -Id $process.Id -ErrorAction SilentlyContinue
-
-          Write-Host "setup.bat completed successfully."
+      - name: Start Bot (run.py with LIVE logs)
+        run: |
+          cd "C:\Users\RDP\Downloads\Apna"
+          Write-Host "Starting bot with Python 3.12 ..."
+          "C:\Program Files\Python312\python.exe" "run.py" 2>&1 | Tee-Object "C:\Users\RDP\Downloads\Apna\bot.log"
+        shell: powershell
 
       - name: Install Tailscale
         run: |
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = "$env:TEMP\tailscale.msi"
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $path = "$env:TEMP\tailscale.msi"
           
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
+          Invoke-WebRequest $url -OutFile $path
+          Start-Process msiexec.exe -ArgumentList "/i `"$path`" /quiet /norestart" -Wait
+          Remove-Item $path -Force
 
-      - name: Connect to Tailscale
+      - name: Connect Tailscale
         run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=runner-$env:GITHUB_RUN_ID
 
-          $tsIP = $null
-          $retries = 0
-          
-          while (-not $tsIP -and $retries -lt 10) {
-              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-              Start-Sleep -Seconds 5
-              $retries++
-          }
+          $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+          echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-          if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned."
-              exit 1
-          }
-
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-
-      - name: Verify RDP
+      - name: Keep Alive
         run: |
-          $test = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
-          
-          if (-not $test.TcpTestSucceeded) {
-              Write-Error "RDP not reachable."
-              exit 1
-          }
-
-          Write-Host "RDP is active and reachable."
-
-      - name: Keep Runner Alive
-        run: |
-          Write-Host ""
           Write-Host "=== RDP ACCESS ==="
-          Write-Host "IP Address : $env:TAILSCALE_IP"
-          Write-Host "Username   : RDP"
-          Write-Host "Password   : $env:RDP_PASSWORD"
-          Write-Host "=================="
-          Write-Host ""
+          Write-Host "IP: $env:TAILSCALE_IP"
+          Write-Host "User: RDP"
+          Write-Host "Pass: $env:RDP_PASSWORD"
+          Write-Host "Bot logs saved to: C:\Users\RDP\Downloads\Apna\bot.log"
 
           while ($true) {
-              Start-Sleep -Seconds 300
-              Write-Host "[$(Get-Date)] RDP still alive..."
+            Start-Sleep 300
           }
