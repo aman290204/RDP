@@ -47,13 +47,13 @@ jobs:
           Expand-Archive -LiteralPath $src -DestinationPath $dest -Force
           Write-Host "Extracted to $dest"
 
-      - name: Install Python 3.12 (MSI stable method)
+      - name: Install Python 3.12 (MSI working URL)
         run: |
           Write-Host "Downloading Python 3.12 MSI..."
           $msi = "$env:TEMP\python312.msi"
 
           Invoke-WebRequest `
-            -Uri "https://www.python.org/ftp/python/3.12.1/python-3.12.1-amd64.msi" `
+            -Uri "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.msi" `
             -OutFile $msi
 
           Write-Host "Installing Python 3.12 MSI..."
@@ -66,7 +66,7 @@ jobs:
             exit 1
           }
 
-          Write-Host "Python 3.12 successfully installed!"
+          Write-Host "Python 3.12 installed successfully!"
 
       - name: Install Python Dependencies
         run: |
@@ -106,7 +106,6 @@ jobs:
           
           Invoke-WebRequest $url -OutFile $path
           Start-Process msiexec.exe -ArgumentList "/i `"$path`" /quiet /norestart" -Wait
-          Remove-Item $path -Force
 
       - name: Connect Tailscale
         run: |
