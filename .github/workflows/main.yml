@@ -47,30 +47,30 @@ jobs:
           Expand-Archive -LiteralPath $src -DestinationPath $dest -Force
           Write-Host "Extracted to $dest"
 
-      - name: Install Python 3.12 (MSI working URL)
+      - name: Install Python 3.11 (MSI Guaranteed Working)
         run: |
-          Write-Host "Downloading Python 3.12 MSI..."
-          $msi = "$env:TEMP\python312.msi"
+          Write-Host "Downloading Python 3.11.7 MSI..."
+          $msi = "$env:TEMP\python311.msi"
 
           Invoke-WebRequest `
-            -Uri "https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.msi" `
+            -Uri "https://www.python.org/ftp/python/3.11.7/python-3.11.7-amd64.msi" `
             -OutFile $msi
 
-          Write-Host "Installing Python 3.12 MSI..."
+          Write-Host "Installing Python 3.11.7 MSI..."
           Start-Process msiexec.exe `
             -ArgumentList "/i `"$msi`" /quiet InstallAllUsers=1 PrependPath=1" `
             -Wait
 
-          if (-Not (Test-Path "C:\Program Files\Python312\python.exe")) {
-            Write-Error "Python 3.12 MSI Installation FAILED!"
+          if (-Not (Test-Path "C:\Program Files\Python311\python.exe")) {
+            Write-Error "Python 3.11 MSI Installation FAILED!"
             exit 1
           }
 
-          Write-Host "Python 3.12 installed successfully!"
+          Write-Host "Python 3.11 installed successfully!"
 
       - name: Install Python Dependencies
         run: |
-          $pip = "C:\Program Files\Python312\Scripts\pip.exe"
+          $pip = "C:\Program Files\Python311\Scripts\pip.exe"
 
           & $pip install --upgrade pip
           & $pip install flask gunicorn pyromod==1.5 aiohttp aiofiles requests hachoir cloudscraper pycryptodome pytz motor "pymongo>=4.0" pyrofork PyJWT aiogram beautifulsoup4 httpx "python-telegram-bot==20.6" tqdm colorama termcolor python-dotenv
@@ -95,8 +95,8 @@ jobs:
       - name: Start Bot (run.py with LIVE logs)
         run: |
           cd "C:\Users\RDP\Downloads\Apna"
-          Write-Host "Starting bot with Python 3.12 ..."
-          "C:\Program Files\Python312\python.exe" "run.py" 2>&1 | Tee-Object "C:\Users\RDP\Downloads\Apna\bot.log"
+          Write-Host "Starting bot using Python 3.11 ..."
+          "C:\Program Files\Python311\python.exe" "run.py" 2>&1 | Tee-Object "C:\Users\RDP\Downloads\Apna\bot.log"
         shell: powershell
 
       - name: Install Tailscale
