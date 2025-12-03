@@ -48,24 +48,26 @@ jobs:
           Expand-Archive -LiteralPath $src -DestinationPath $dest -Force
           Write-Host "Extracted to $dest"
 
-      - name: Install Python 3.12
-        run: |
-          Write-Host "Downloading Python 3.12..."
-          Invoke-WebRequest `
-            -Uri "https://www.python.org/ftp/python/3.12.1/python-3.12.1-amd64.exe" `
-            -OutFile "$env:TEMP\python_installer.exe"
+     - name: Install Python 3.12 (MSI stable method)
+  run: |
+    Write-Host "Downloading Python 3.12 MSI..."
+    $msi = "$env:TEMP\python312.msi"
 
-          Write-Host "Installing Python..."
-          Start-Process "$env:TEMP\python_installer.exe" `
-            -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_launcher=1" `
-            -Wait
+    Invoke-WebRequest `
+      -Uri "https://www.python.org/ftp/python/3.12.1/python-3.12.1-amd64.msi" `
+      -OutFile $msi
 
-          if (-Not (Test-Path "C:\Program Files\Python312\python.exe")) {
-            Write-Error "Python 3.12 FAILED to install!"
-            exit 1
-          }
+    Write-Host "Installing Python 3.12 MSI..."
+    Start-Process msiexec.exe `
+      -ArgumentList "/i `"$msi`" /quiet InstallAllUsers=1 PrependPath=1" `
+      -Wait
 
-          Write-Host "Python 3.12 installed successfully."
+    if (-Not (Test-Path "C:\Program Files\Python312\python.exe")) {
+      Write-Error "Python 3.12 MSI Installation FAILED!"
+      exit 1
+    }
+
+    Write-Host "Python 3.12 successfully installed!"
 
       - name: Install Python Dependencies
         run: |
