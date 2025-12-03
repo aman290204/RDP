@@ -42,7 +42,7 @@ jobs:
 
           echo "RDP_PASSWORD=$RdpPassword" >> $env:GITHUB_ENV
 
-      - name: Prepare User Profile Folders
+      - name: Prepare User Folders
         run: |
           $userRoot = "C:\Users\RDP"
           $downloads = "$userRoot\Downloads"
@@ -52,73 +52,56 @@ jobs:
 
       - name: Copy & Extract ZIP to Downloads
         run: |
-          $source = "$env:GITHUB_WORKSPACE\assets\ApnaEx.zip"
-          $userRoot = "C:\Users\RDP"
-          $downloads = "$userRoot\Downloads"
+          $source = "$env:GITHUB_WORKSPACE\assets\Apna 1.zip"
+          $downloads = "C:\Users\RDP\Downloads"
 
-          $zipPath = "$downloads\ApnaEx.zip"
-          $extractPath = "$downloads\ApnaEx"
+          $zipPath = "$downloads\Apna 1.zip"
+          $extractPath = "$downloads\Apna 1"
 
           Copy-Item -Path $source -Destination $zipPath -Force
+
           Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
 
-          Write-Host "ZIP copied and extracted."
+          Write-Host "ZIP extracted to $extractPath"
 
-      - name: Install Python 3.12
-        run: |
-          Write-Host "Downloading Python installer..."
-          $pythonInstaller = "$env:TEMP\python.exe"
-          Invoke-WebRequest "https://www.python.org/ftp/python/3.12.1/python-3.12.1-amd64.exe" -OutFile $pythonInstaller
-
-          Write-Host "Installing Python..."
-          Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
-          Write-Host "Python installed."
-
-      - name: Run setup.bat and python run.py
+      - name: Run setup.bat
         run: |
           $downloads = "C:\Users\RDP\Downloads"
-          $extractPath = "$downloads\ApnaEx"
-          $batFile = "$extractPath\ApnaEx\setup.bat"
-          $pythonScript = "$extractPath\ApnaEx\run.py"
+          $extractPath = "$downloads\Apna 1"
+          $batFile = "$extractPath\setup.bat"
 
           if (-Not (Test-Path $batFile)) {
-            Write-Error "setup.bat not found!"
+            Write-Error "setup.bat not found at: $batFile"
             exit 1
           }
 
-          # Run setup.bat with token
-          Start-Process -FilePath $batFile -ArgumentList "${{ secrets.BOT_TOKEN }}" -Wait
+          Write-Host "Running setup.bat..."
 
-          Write-Host "setup.bat finished."
+          # Run setup.bat normally
+          $process = Start-Process -FilePath $batFile -PassThru
+          $process.WaitForExit()
 
-          # Wait 60 seconds
-          Start-Sleep -Seconds 60
+          # Force close if PAUSE exists
+          Stop-Process -Id $process.Id -ErrorAction SilentlyContinue
 
-          # Run python run.py
-          if (-Not (Test-Path $pythonScript)) {
-            Write-Error "run.py not found!"
-            exit 1
-          }
-
-          Write-Host "Launching python run.py ..."
-          Start-Process -FilePath "python" -ArgumentList "`"$pythonScript`"" -Wait
-          Write-Host "run.py completed."
+          Write-Host "setup.bat completed successfully."
 
       - name: Install Tailscale
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = "$env:TEMP\tailscale.msi"
-
+          
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
           Remove-Item $installerPath -Force
 
-      - name: Establish Tailscale Connection
+      - name: Connect to Tailscale
         run: |
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
 
           $tsIP = $null
           $retries = 0
+          
           while (-not $tsIP -and $retries -lt 10) {
               $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
               Start-Sleep -Seconds 5
@@ -132,24 +115,28 @@ jobs:
 
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
-      - name: Verify RDP Accessibility
+      - name: Verify RDP
         run: |
           $test = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
+          
           if (-not $test.TcpTestSucceeded) {
-              Write-Error "RDP port is not reachable"
+              Write-Error "RDP not reachable."
               exit 1
           }
-          Write-Host "RDP port reachable."
 
-      - name: Maintain Connection
+          Write-Host "RDP is active and reachable."
+
+      - name: Keep Runner Alive
         run: |
-          Write-Host "`n=== RDP ACCESS ==="
-          Write-Host "IP Address: $env:TAILSCALE_IP"
-          Write-Host "Username: RDP"
-          Write-Host "Password: $env:RDP_PASSWORD"
-          Write-Host "===================`n"
+          Write-Host ""
+          Write-Host "=== RDP ACCESS ==="
+          Write-Host "IP Address : $env:TAILSCALE_IP"
+          Write-Host "Username   : RDP"
+          Write-Host "Password   : $env:RDP_PASSWORD"
+          Write-Host "=================="
+          Write-Host ""
 
           while ($true) {
-              Write-Host "[$(Get-Date)] RDP Active..."
               Start-Sleep -Seconds 300
+              Write-Host "[$(Get-Date)] RDP still alive..."
           }
