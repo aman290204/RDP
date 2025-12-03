@@ -93,8 +93,17 @@ jobs:
         run: |
           cd "C:\Users\RDP\Downloads\Apna"
           Write-Host "Starting bot with Python..."
-          cmd /c "\"$env:PYTHON_EXE\" run.py 2>&1 | Tee-Object C:\Users\RDP\Downloads\Apna\bot.log || exit 0"
+
+          try {
+            & $env:PYTHON_EXE run.py 2>&1 | Tee-Object "C:\Users\RDP\Downloads\Apna\bot.log"
+          }
+          catch {
+            Write-Host "Bot exited with error but continuing workflow..."
+          }
+
+          exit 0
         shell: powershell
+
 
       - name: Install Tailscale
         run: |
